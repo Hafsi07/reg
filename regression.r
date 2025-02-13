@@ -2,10 +2,10 @@ library(dplyr)
 library(ggcorrplot)
 library(corrplot)
 library(ggplot2)
-library(GGally)
+library(gamlss)
 
 #Loading Data
-df<-read.csv("C:\\Users\\hafsi\\Downloads\\Rice.csv")
+df <- read.csv("C:\\Users\\hafsi\\Downloads\\Rice.csv")
 
 #Exploring the data
 summary(df)
@@ -31,10 +31,7 @@ str(df)
 num_cols <- sapply(df, is.numeric)
 par(mfrow = c(2, 2))  # Create a 2x2 grid of plots.
 
-for (i in 1..5){
-
-}
-for (col in names(df)[num_cols[:4]]) {
+for (col in names(df)[num_cols]) {
   plot(df[[col]], df$goutput, main = paste("Scatterplot of", col, "vs Goutput"), xlab = col, ylab = "Target", col = "blue")
 }
 
@@ -72,7 +69,7 @@ df <- df %>% select(-id)
 
 
 set.seed(64587) 
-indices <- sample(1:nrow(df), size = 0.7* nrow(df))
+indices <- sample( 1:nrow(df), size = 0.7 * nrow(df))
 train <- df[indices, ]
 test <- df[-indices, ]
 
@@ -81,3 +78,21 @@ mod.v1<- lm(goutput~.,data=train)
 aicv1<-AIC(mod.v1)
 r2v1<-summary(mod.v1)$r.squared
 summary(mod.v1)
+
+mod.v2 <- lm(goutput ~ size + phosphate + pesticide + seed + purea, data = train)
+aicv2<-AIC(mod.v2)
+r2v2<-summary(mod.v2)$r.squared
+summary(mod.v2)
+
+
+qqnorm(residuals(mod.v1))
+qqline(residuals(mod.v1), col = "red")
+
+mod.gamlss <- gamlss(goutput ~ ., data=df, family=TF)
+summary(mod.gamlss)
+
+mod.gamlss1 <-gamlss (goutput~ phosphate + pesticide + size + bimas + seed,data= df)
+summary(mod.gamlss1)
+
+qqnorm(residuals(mod.gamlss))
+qqline(residuals(mod.gamlss))
