@@ -1,52 +1,67 @@
 require(tidyverse)
 require(magrittr)
+require(tscount)
+library(zoo)
+library(ggplot2)
 
-df <- read.csv("Downloads\\Covid_data.csv")
+df <- read.csv("../Downloads/COVIDenh.csv")
 
 str(df)
 
 # removing index column
-df <- df[2:length(df[1, ])]
+#df <- df[2:length(df[1, ])]
 
 # renaming columns
-namescol <- c("Date", "State", "hospitalized+symptoms", "intensive_care",
-              "hospitalized", "home_isolation", "positive_cases",
-              "variation_of_+_cases", "+_cases", "recovered", "deceased",
-              "diagnostic_suspicion_cases", "screening_cases", "total_cases",
-              "tests_performed", "tested_individuals", "note",
-              "intensive_care_oggi", "test_note", "case_note",
-              "molecular_test_tot", "rapid_antigen_test_tot",
-              "molecular_test_oggi", "rapid_antigen_oggi", "proportion_new")
-colnames(df) <- namescol
+df %<>% rename(
+  date = data,
+  country = stato,
+  hospitalized_with_symptoms = ricoverati_con_sintomi,
+  intensive_care = terapia_intensiva,
+  total_hospitalized = totale_ospedalizzati,
+  home_isolation = isolamento_domiciliare,
+  total_positive = totale_positivi,
+  change_total_positive = variazione_totale_positivi,
+  new_positive = nuovi_positivi,
+  recovered = dimessi_guariti,
+  deceased = deceduti,
+  cases_diagnostic_suspicion = casi_da_sospetto_diagnostico,
+  cases_screening = casi_da_screening,
+  total_cases = totale_casi,
+  swabs = tamponi,
+  cases_tested = casi_testati,
+  notes = note,
+  intensive_care_admissions = ingressi_terapia_intensiva,
+  test_notes = note_test,
+  case_notes = note_casi,
+  total_positive_molecular_test = totale_positivi_test_molecolare,
+  total_positive_rapid_antigen_test = totale_positivi_test_antigenico_rapido,
+  molecular_test_swabs = tamponi_test_molecolare,
+  rapid_antigen_test_swabs = tamponi_test_antigenico_rapido
+)
 
 # transforming data types
-df$Date <- as.Date(df$Date)
+df$date <- as.Date(df$date)
 
 # checking na values
 df %>%
-  summarise(across(everything(), ~sum(is.na(.)))) %>%
+  summarise(across(everything(), ~ sum(is.na(.)))) %>%
   pivot_longer(cols = everything(), names_to = "Variables",
-               values_to = "NA count") %>% 
-  filter(. > 0)
+               values_to = "NA_count") %>% 
+  filter(NA_count > 0)
 
 # checking for columns' utility
 dim(df)
-length(unique(df[, "Date"]))
-unique(df[, "State"])
-unique(df[, "note"])
+length(unique(df[, "date"]))
+unique(df[, "country"])
+unique(df[, "notes"])
 
-unique(df[, "test_note"])
-unique(df[, "case_note"])
-
-
-# these two columns have only 162 values and the rest is missing
-sum(is.na(df$diagnostic_suspicion_cases))
-sum(is.na(df$screening_cases))
+unique(df[, "test_notes"])
+unique(df[, "case_notes"])
 
 # we need to drop the insignificant columns
 df %<>%
-  select(-c("State", "note", "diagnostic_suspicion_cases",
-            "screening_cases", "test_note", "case_note"))
+  select(-c("country", "notes", "cases_diagnostic_suspicion",
+            "cases_screening", "test_notes", "case_notes"))
 
 # we verify again if the rest of the columns contain unique or only NA values
 df %>%
@@ -55,14 +70,14 @@ df %>%
 
 str(df)
 
-ggplot(df, aes(x = Date, y = total_cases)) +
-  geom_line(color = "blue", size = 1) +
+ggplot(df, aes(x = date, y = total_cases)) +
+  geom_line(color = "black", size = 1) +
   labs(title = "Total Cases Over Time", x = "Date", y = "Total Cases") +
   theme_minimal()
 
 # distribution of cases 
 ggplot(df, aes(x = total_cases)) +
-  geom_histogram(binwidth = 1000000, fill = "blue", color = "black") +
+  geom_histogram(binwidth = 1000000, fill = "lightblue", color = "black") +
   labs(title = "Distribution of Total Cases", x = "Total Cases", y = "Frequency") +
   theme_minimal()
   
@@ -71,6 +86,111 @@ ggplot(df, aes(x = total_cases)) +
 # the values in the middle occured wayyy less than on the sides 
 # We have to consider the number of tests done as well to confirm
 ggplot(df, aes(x = total_cases)) +
-  geom_density(fill = "blue", alpha = 0.5) +
+  geom_density(fill = "lightblue", alpha = 0.5) +
   labs(title = "Density Plot of Total Cases", x = "Total Cases", y = "Density") +
   theme_minimal()
+
+ggplot(df, aes(x = date, y = log(df$total_cases + 1)))+
+  labs(title = "Total Cases Over Timess", x = "Date", y = "Total Cases") +
+  theme_minimal()
+
+
+numvars <- df %>% select(where(is.numeric))
+numplots <- ncol(numvars)
+par(mfrow = c(1, 1), mar = c(3, 3, 2, 1))
+
+for (var in names(numvars)) {
+  plot(Date, numvars[[var]], type = "l",
+       main = var, xlab = "Date", ylab = "")
+}
+
+df %>% arrange(.,by=date) %>% select()
+
+plot(acf(df$new_positive))
+plot(pacf(df$new_positive))
+
+
+# mod mod mod mod mod mod mod mod mod mod mod
+ldf <- df[df$date >= as.Date("2023-01-01"), ] %>% arrange(., by = date) # Second wave
+ldf$rolling_avg <- rollmean(ldf$new_positive, k = 7, fill = NA, align = "right")
+ldf <- ldf[7:length(ldf$new_positive),]
+
+plot(acf(ldf$rolling_avg))
+plot(pacf(ldf$rolling_avg))
+
+#days of the week
+ldf$DayOfWeek <- weekdays(ldf$date)
+
+# Create dummy variables
+ldf <-cbind(ldf, dummy(ldf))
+
+
+
+ggplot(ldf, aes(x = date)) +
+  geom_line(aes(y = new_positive, color = "Actual Cases"), size = 1) +
+  geom_line(aes(y = rolling_avg, color = "7-Day Rolling Avg"), size = 1.2) +
+  labs(title = "COVID Cases with Rolling Average",
+       x = "Date", y = "Total Cases") +
+  scale_color_manual(values = c("Actual Cases" = "blue", "7-Day Rolling Avg" = "red")) +
+  theme_minimal()
+
+#preparing model training covariates
+covs <- as.matrix(sapply(ldf[,c("DayOfWeek_Tuesday", "DayOfWeek_Wednesday", "DayOfWeek_Thursday",
+                         "DayOfWeek_Friday", "DayOfWeek_Saturday", "DayOfWeek_Sunday")], as.numeric))
+covs <- cbind(covs, ldf$rolling_avg)
+
+# Fit separate glms based on distribution 
+model1 <- tsglm(ldf$new_positive, model = list(past_obs = c(1, 7)), distr = "poisson")
+model2 <- tsglm(ldf$new_positive, model = list(past_obs = c(1, 7)), xreg = covs, link = "log",distr = "nbinom")
+
+summary(model1)
+summary(model2)
+exp(model2$coefficients)
+
+train_size <- round(length(ldf$new_positive)*0.8)
+
+#split
+train_data <- ldf[1:train_size,]
+test_data <- ldf[(train_size+1):length(ldf$new_positive),]
+train_dates <- ldf$date[1:train_size]
+test_dates <- ldf$date[(train_size + 1):nrow(ldf)]
+
+
+#models
+mod_1 <- tsglm(train_data$new_positive, model = list(past_obs =c(1,7)), distr = "nbinom")
+mod_2 <- tsglm(train_data$new_positive, model = list(past_obs =c(1:7)), xreg = covs[1:train_size,], distr = "nbinom")
+mod_3 <- tsglm(train_data$new_positive, model = list(past_obs = c(1, 7), past_mean=c(1, 7)), distr = "nbinom")
+mod_4 <- tsglm(train_data$new_positive, model = list(past_obs = c(1, 7), past_mean=c(1, 7)), xreg = covs[1:train_size,], distr = "nbinom")
+mod_5 <- tsglm(train_data$new_positive, model = list(past_mean=c(1, 7)), distr = "nbinom")
+mod_6 <- tsglm(train_data$new_positive, model = list(past_mean=c(1, 7)), xreg = covs[1:train_size,], distr = "nbinom")
+
+
+
+#forecast
+fare <- function(x){
+  pred <- predict(x, n.ahead = length(test_data$new_positive))$pred
+  print(summary(x))
+  
+  plot_data <- data.frame(
+    Date = test_dates,
+    Actual = test_data$new_positive,
+    Predicted = pred
+  )
+  pred[1:4]
+  
+  gg <- ggplot(plot_data, aes(x = Date)) +
+    geom_line(aes(y = Actual, color = "Actual"), size = 1.2) +
+    geom_line(aes(y = Predicted, color = "Predicted"), size = 1.2, linetype = "dashed") +
+    labs(title = "Actual vs Predicted cases",
+         x = "Date", y = "Total Cases") +
+    scale_color_manual(values = c("Actual" = "blue", "Predicted" = "red")) +
+    theme_minimal()
+  print(gg)
+}
+
+fare(mod_1)
+fare(mod_2)
+fare(mod_3)
+fare(mod_4)
+fare(mod_5)
+fare(mod_6)
