@@ -137,7 +137,7 @@ ggplot(ldf, aes(x = date)) +
 #preparing model training covariates
 covs <- as.matrix(sapply(ldf[,c("DayOfWeek_Tuesday", "DayOfWeek_Wednesday", "DayOfWeek_Thursday",
                          "DayOfWeek_Friday", "DayOfWeek_Saturday", "DayOfWeek_Sunday")], as.numeric))
-covs <- cbind(covs, ldf$rolling_avg)
+covs <- cbind(covs, scale(ldf$rolling_avg)+1)
 
 # Fit separate glms based on distribution 
 model1 <- tsglm(ldf$new_positive, model = list(past_obs = c(1, 7)), distr = "poisson")
@@ -151,9 +151,9 @@ train_size <- round(length(ldf$new_positive)*0.8)
 
 #split
 train_data <- ldf[1:train_size,]
-test_data <- ldf[(train_size+1):length(ldf$new_positive),]
+test_data <- ldf[(train_size+1):(length(ldf$new_positive)-100),]
 train_dates <- ldf$date[1:train_size]
-test_dates <- ldf$date[(train_size + 1):nrow(ldf)]
+test_dates <- ldf$date[(train_size + 1):(nrow(ldf)-100)]
 
 
 #models
@@ -161,8 +161,7 @@ mod_1 <- tsglm(train_data$new_positive, model = list(past_obs =c(1,7)), distr = 
 mod_2 <- tsglm(train_data$new_positive, model = list(past_obs =c(1:7)), xreg = covs[1:train_size,], distr = "nbinom")
 mod_3 <- tsglm(train_data$new_positive, model = list(past_obs = c(1, 7), past_mean=c(1, 7)), distr = "nbinom")
 mod_4 <- tsglm(train_data$new_positive, model = list(past_obs = c(1, 7), past_mean=c(1, 7)), xreg = covs[1:train_size,], distr = "nbinom")
-mod_5 <- tsglm(train_data$new_positive, model = list(past_mean=c(1, 7)), distr = "nbinom")
-mod_6 <- tsglm(train_data$new_positive, model = list(past_mean=c(1, 7)), xreg = covs[1:train_size,], distr = "nbinom")
+mod_5 <- tsglm(train_data$new_positive, model = list(past_mean=c(1, 7)), link = "log", xreg = covs[1:train_size,], distr = "nbinom")
 
 
 
@@ -193,4 +192,6 @@ fare(mod_2)
 fare(mod_3)
 fare(mod_4)
 fare(mod_5)
-fare(mod_6)
+
+
+# what if we put the average transition ration of each day in reference to the previous day
